@@ -11,48 +11,87 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  lint:
+  backend:
+    name: Backend / build and test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: package-lock.json
+
       - name: Install dependencies
         run: npm ci
-      - name: Lint backend
-        run: npm run lint --workspace=xconfess-backend
-      - name: Lint frontend
-        run: npm run lint --workspace=xconfess-frontend
 
-  contracts:
+      - name: Build backend
+        run: npm run build --workspace=xconfess-backend
+
+      - name: Test backend
+        run: npm run test --workspace=xconfess-backend
+
+  frontend:
+    name: Frontend / build and test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build --workspace=xconfess-frontend
+
+      - name: Test frontend
+        run: npm run test --workspace=xconfess-frontend
+
+  contracts:
+    name: Contracts / fmt clippy and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: xconfess-contracts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          components: rustfmt, clippy
           targets: wasm32-unknown-unknown
-      
+
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
         with:
           workspaces: xconfess-contracts
           cache-targets: true
-      
-      - name: Check contracts
-        run: ./scripts/test-contracts.sh
-      
-      - name: Upload test results on failure
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test contracts
+        run: cargo test --workspace
+
+      - name: Upload target directory on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: contract-check-logs
-          path: |
-            xconfess-contracts/target/
+          path: xconfess-contracts/target/
           retention-days: 7
